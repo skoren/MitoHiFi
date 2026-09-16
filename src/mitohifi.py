@@ -59,6 +59,7 @@ def main():
     optional.add_argument("-m", help="-m: Number of bits for HiFiasm bloom filter [it maps to -f in HiFiasm] (default = 0)", type=int, default=0, metavar='<BLOOM FILTER>')
     optional.add_argument("--max-read-len", help="Maximum lenght of read relative to related mito (default = 1.0x related mito length)", type=float, default=1.0)
     optional.add_argument("--mitos", help="Use MITOS2 for annotation (opposed to default MitoFinder", action="store_true")
+    optional.add_argument("--rotate-to-reference", help="Rotate circularized assemblies to the start of the provided reference FASTA (-f)", action="store_true")
     optional.add_argument('--circular-size', help='Size to consider when checking for circularization', type=int, default=220)
     optional.add_argument('--circular-offset', help='Offset from start and finish to consider when looking for circularization', type=int, default=40)
     optional.add_argument('-winSize', help='Size of windows to calculate coverage over the final_mitogenom', type=int, default=300)
@@ -286,17 +287,21 @@ The pipeline has stopped !! You need to run further scripts to check if you have
             refseq_db = "refseq89m"
         partial_process_contig = functools.partial(process_contig_mitos, threads_per_contig,
                                                    args.circular_size, args.circular_offset,
-                                                   contigs, max_contig_size, args.g, args.o, refseq_db)
+                                                   contigs, max_contig_size, args.g, args.o, refseq_db,
+                                                   args.rotate_to_reference)
     else:
         logging.info("Annotation will be done using MitoFinder (default)")
         partial_process_contig = functools.partial(process_contig, threads_per_contig,
                                                    args.circular_size, args.circular_offset,
-                                                   contigs, max_contig_size, args.g, args.o)
+                                                   contigs, max_contig_size, args.g, args.o,
+                                                   args.rotate_to_reference)
     
     with concurrent.futures.ProcessPoolExecutor() as executor:
         executor.map(partial_process_contig, contigs_ids)
     
-    if args.mitos: 
+    if args.rotate_to_reference:
+        tRNA_ref = None
+    elif args.mitos: 
         tRNA_ref = fetch_mitos.get_ref_tRNA() 
     else:
         tRNA_ref = fetch.get_ref_tRNA()
@@ -308,12 +313,12 @@ The pipeline has stopped !! You need to run further scripts to check if you have
         partial_process_contig_02 = functools.partial(process_contig_02_mitos, tRNA_ref,
                                                     threads_per_contig, args.circular_size,
                                                     args.circular_offset, contigs, max_contig_size,
-                                                    args.g, args.o)
+                                                    args.g, args.o, args.rotate_to_reference, args.f)
     else:
         partial_process_contig_02 = functools.partial(process_contig_02, tRNA_ref,
                                                     threads_per_contig, args.circular_size,
                                                     args.circular_offset, contigs, max_contig_size,
-                                                    args.g, args.o)
+                                                    args.g, args.o, args.rotate_to_reference, args.f)
 
 
     with concurrent.futures.ProcessPoolExecutor() as executor:

@@ -22,6 +22,7 @@ import getMitoLength
 import logging
 import warnings 
 import rotation
+import reference_rotation
 import shutil
 from Bio import SeqIO 
 from circularizationCheck import get_circo_mito
@@ -31,7 +32,7 @@ import filterfasta
 from rotate_genbank import rotate_genbank
 from reverse_complement import reverse_complement
 
-def process_contig(threads_per_contig, circular_size, circular_offset, contigs, max_contig_size, rel_gbk, gen_code, contig_id): 
+def process_contig(threads_per_contig, circular_size, circular_offset, contigs, max_contig_size, rel_gbk, gen_code, rotate_to_reference=False, contig_id=None): 
     """Circularize and annotate a contig.
      
     Args:
@@ -75,11 +76,13 @@ def process_contig(threads_per_contig, circular_size, circular_offset, contigs, 
             for trna in trnas:
                 outfile.write("\t".join([trna, trnas[trna][0], trnas[trna][1], "\n"]))
         return
+    elif rotate_to_reference:
+        return
     else:
         warnings.warn(f"No tRNA gene found in {mitogenome_gb}... Skipping contig {contig_id}")
         return
 
-def process_contig_02(ref_tRNA, threads_per_contig, circular_size, circular_offset, contigs, max_contig_size, rel_gbk, gen_code, contig_id): 
+def process_contig_02(ref_tRNA, threads_per_contig, circular_size, circular_offset, contigs, max_contig_size, rel_gbk, gen_code, rotate_to_reference=False, reference_fasta=None, contig_id=None): 
     """Rotate a contig related to a reference tRNA gene and calculate contig statistics. 
      
     Args:
@@ -97,10 +100,49 @@ def process_contig_02(ref_tRNA, threads_per_contig, circular_size, circular_offs
         None
     """    
     logging.info(f"Started {contig_id} rotation.")
+    if rotate_to_reference:
+        mitogenome_annotation = os.path.join(contig_id + ".annotation", contig_id + ".annotation_MitoFinder_mitfi_Final_Results", contig_id + ".annotation_mtDNA_contig.gb")
+        mitogenome_gb = contig_id + ".mitogenome.gb"
+        record = SeqIO.read(mitogenome_annotation, "genbank")
+        record.id = record.description
+        record.name = record.description
+        with open(mitogenome_gb, "w") as f:
+            SeqIO.write(record, f, "genbank")
+
+        mitogenome_fasta = contig_id + ".mitogenome.fa"
+        mitogenome_rotated_gb = f"{contig_id}.mitogenome.rotated.gb"
+        rotated_file = os.path.join(os.path.dirname(mitogenome_fasta), contig_id + '.mitogenome.rotated.fa')
+        logging.info("Rotating %s to the provided reference start", contig_id)
+        try:
+            reference_rotation.rotate_annotations(
+                mitogenome_fasta, mitogenome_gb, rotated_file,
+                mitogenome_rotated_gb, reference_fasta, "genbank"
+            )
+        except ValueError as error:
+            warnings.warn(f"Contig {contig_id} has no unique reference anchor: {error}")
+            return
+
+        logging.info(f"Rotation of {contig_id} done. Rotated is at {rotated_file}") 
+        frameshifts = findFrameShifts.find_frameshifts(mitogenome_rotated_gb)
+        gb_len, num_genes = findFrameShifts.get_gb_stats(mitogenome_rotated_gb)
+        contig_dir = os.path.join("potential_contigs", contig_id)
+        mitogenome_location = os.path.join(contig_dir, mitogenome_rotated_gb)
+        is_circ = get_circularization_info(contig_id)
+        if not frameshifts:
+            all_frameshifts = "No frameshift found"
+        elif len(frameshifts)==1:
+            all_frameshifts = "".join(frameshifts)
+        elif len(frameshifts)>1:
+            all_frameshifts = ";".join(frameshifts)
+        with open(f"{contig_id}.individual.stats", "w") as outfile:
+            outfile.write("\t".join([contig_id, all_frameshifts, mitogenome_location, gb_len, num_genes, str(is_circ)+"\n"]))
+        return
+
     if not os.path.isfile(f"{contig_id}.trnas"):
         warnings.warn(f"Contig {contig_id} does not have annotated tRNAs, skipping it...")
         return
     
+    start = None
     with open(f"{contig_id}.trnas", "r") as infile:
         for line in infile:
             if line.strip().split("\t")[0] == ref_tRNA:

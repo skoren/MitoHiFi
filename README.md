@@ -279,7 +279,11 @@ Mitohifi is going to pull possible mito contigs by blasting your contigs with th
 
 The default annotator for MitoHiFi is MitoFinder, but the user can annotate with MITOS by flagging **--mitos** while starting a MitoHiFi run.
 
-### 7.3 Plots
+### 7.3 Rotate to reference start
+
+By default, MitoHiFi keeps rotating circularized assemblies to tRNA-Phe. Use **--rotate-to-reference** to additionally rotate each circularized assembly to the start of the reference FASTA provided with **-f**, using the first 300 bp of that reference as the alignment anchor. For human mitochondrial assemblies, provide rCRS (**NC_012920.1**) as **-f** to rotate to the rCRS start. If the reference-start anchor is missing or ambiguous, that contig is skipped rather than misrotated.
+
+### 7.4 Plots
 
 The user can change **-winSize** and **-covMap** parameters to tun the final coverage plots. 
 
@@ -313,4 +317,3 @@ And for tRNAs annotation:
 ## 9. Watch a lecture on MitoHiFi
 
 Want to know everything about how to run MitoHiFi for animals, funghi and plants? Why the pipeline stops sometimes? Caveats and best practices? Have a watch here: https://youtube.com/watch?v=1NWHC2zkRmg 
-

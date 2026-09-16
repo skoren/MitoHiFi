@@ -21,6 +21,7 @@ import getMitoLength
 import logging
 import warnings 
 import rotation_mitos
+import reference_rotation
 import shutil
 from Bio import SeqIO 
 from circularizationCheck import get_circo_mito
@@ -31,7 +32,7 @@ from fix_improper_gff import fix_improper_gff
 from rotate_genbank import rotate_genbank
 from reverse_complement import reverse_complement, reverse_complement_mitos, reverse_complement_annotation
 
-def process_contig_mitos(threads_per_contig, circular_size, circular_offset, contigs, max_contig_size, rel_gbk, gen_code, refseq_db, contig_id): 
+def process_contig_mitos(threads_per_contig, circular_size, circular_offset, contigs, max_contig_size, rel_gbk, gen_code, refseq_db, rotate_to_reference=False, contig_id=None): 
     """Circularize and annotate a contig.
      
     Args:
@@ -88,11 +89,13 @@ def process_contig_mitos(threads_per_contig, circular_size, circular_offset, con
             for trna in trnas:
                 outfile.write("\t".join([trna, trnas[trna][0], trnas[trna][1], "\n"]))
         return
+    elif rotate_to_reference:
+        return
     else:
         warnings.warn(f"No tRNA gene found in {mitogenome_gff}... Skipping contig {contig_id}")
         return
 
-def process_contig_02_mitos(ref_tRNA, threads_per_contig, circular_size, circular_offset, contigs, max_contig_size, rel_gbk, gen_code, contig_id): 
+def process_contig_02_mitos(ref_tRNA, threads_per_contig, circular_size, circular_offset, contigs, max_contig_size, rel_gbk, gen_code, rotate_to_reference=False, reference_fasta=None, contig_id=None): 
     """Rotate a contig related to a reference tRNA gene and calculate contig statistics. 
      
     Args:
@@ -111,6 +114,38 @@ def process_contig_02_mitos(ref_tRNA, threads_per_contig, circular_size, circula
     """    
     logging.info(f"Started process_contig_02_mitos function | tRNA_ref: {ref_tRNA}") # debug
     logging.info(f"Started {contig_id} rotation.")
+    if rotate_to_reference:
+        mitogenome_annotation = os.path.join(contig_id + ".annotation", "result.gff")
+        mitogenome_fasta = contig_id + ".mitogenome.fa"
+        rotated_file = os.path.join(os.path.dirname(mitogenome_fasta), contig_id + '.mitogenome.rotated.fa')
+        mitogenome_rotated_annotation = mitogenome_annotation.replace(".gff", ".rotated.gff")
+        logging.info("Rotating %s to the provided reference start", contig_id)
+        try:
+            reference_rotation.rotate_annotations(
+                mitogenome_fasta, mitogenome_annotation, rotated_file,
+                mitogenome_rotated_annotation, reference_fasta, "gff"
+            )
+        except ValueError as error:
+            warnings.warn(f"Contig {contig_id} has no unique reference anchor: {error}")
+            return
+
+        logging.info(f"Rotation of {contig_id} done. Rotated is at {rotated_file}") 
+        mitogenome_faa = mitogenome_annotation.replace("_RC", "").replace(".gff", ".faa")
+        frameshifts = find_frameshifts_mitos(mitogenome_faa)
+        seq_len, num_genes = get_mitos_stats(mitogenome_rotated_annotation, rotated_file)
+        contig_dir = os.path.join("potential_contigs", contig_id)
+        mitogenome_annotation_location = os.path.join(contig_dir, mitogenome_rotated_annotation)
+        is_circ = get_circularization_info(contig_id)
+        if not frameshifts:
+            all_frameshifts = "No frameshift found"
+        elif len(frameshifts)==1:
+            all_frameshifts = "".join(frameshifts)
+        elif len(frameshifts)>1:
+            all_frameshifts = ";".join(frameshifts)
+        with open(f"{contig_id}.individual.stats", "w") as outfile:
+            outfile.write("\t".join([contig_id, all_frameshifts, mitogenome_annotation_location, str(seq_len), str(num_genes), str(is_circ)+"\n"]))
+        return
+
     if not os.path.isfile(f"{contig_id}.trnas"):
         warnings.warn(f"Contig {contig_id} does not have annotated tRNAs, skipping it...")
         return
