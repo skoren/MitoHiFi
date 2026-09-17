@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -eou pipefail
+script_path=$(realpath "$0") || exit 1
+script_path=$(dirname "$script_path")
+script_path=$(dirname "$script_path")
+
+IMAGE="$script_path/mitohifi.sif"
+
+P=$(realpath "$PWD") || exit 1
+
+apptainer exec --pwd $P --bind $P:$P:rw --bind $script_path:/patched/MitoHiFi:rw $IMAGE python3 /patched/MitoHiFi/src/mitohifi.py "$@"
