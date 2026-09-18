@@ -69,7 +69,7 @@ def main():
         parser.error("Output must not overwrite an input file")
     try:
         reads, count = extract(args.scaffold, args.scfmap, args.layout)
-        with open(args.output, "w") as handle:
+        with open(args.output, "a") as handle:
             for read in reads:
                 handle.write(read + "\n")
     except (OSError, ValueError) as error:

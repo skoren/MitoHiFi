@@ -132,7 +132,7 @@ def rotate_gff(input_gff, output_gff, rotation, length, reverse=False):
 def rotate_genbank(input_gb, output_gb, rotation, reverse=False, id_suffix="_rotated"):
     record = SeqIO.read(input_gb, "genbank")
     if reverse:
-        record = record.reverse_complement(id=record.id)
+        record = record.reverse_complement(id=True, name=True, description=True, dbxrefs=True)
 
     shifted = record[rotation:] + record[:rotation]
     shifted.id = record.id + id_suffix
